@@ -1,0 +1,7 @@
+@import 'tailwindcss';
+html,
+body {
+	height: 100%;
+	margin: 0;
+	background: #0a0a0a; /* or just use Tailwind classes everywhere */
+}
