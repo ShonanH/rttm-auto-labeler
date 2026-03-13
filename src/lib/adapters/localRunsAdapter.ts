@@ -167,6 +167,8 @@ export class LocalRunsAdapter implements RunAdapter {
 	private reviewedDirName = 'instances_reviewed';
 	private exportDirName = 'labels_txt_reviewed';
 
+	private videoDir: FileSystemDirectoryHandle | null = null;
+
 	async openRunFolder(): Promise<void> {
 		const picked = await (window as unknown as { showDirectoryPicker(): Promise<FileSystemDirectoryHandle> }).showDirectoryPicker();
 		// User may pick:
@@ -200,6 +202,9 @@ export class LocalRunsAdapter implements RunAdapter {
 		this.pointsDir = pointsParent;
 		this.frameIndexFile = frameIndex;
 		this.instancesDir = (await tryGetDir(runDir, this.instancesDirName))!; // now exists
+
+		const videoDir = await tryGetDir(frames, 'video');
+		this.videoDir = videoDir; // may be null
 
 		// review/instances_reviewed (create if missing)
 		const reviewDir = await ensureDir(runDir, 'review');
@@ -334,6 +339,21 @@ export class LocalRunsAdapter implements RunAdapter {
 		}
 
 		return { outDir: `exports/${this.exportDirName}`, numFrames, numBoxes };
+	}
+
+	async loadVideoFrameUrl(frameId: string): Promise<string | null> {
+		if (!this.framesDir) throw new Error('Run not opened');
+		if (!this.videoDir) return null;
+
+		// try jpg then png
+		const jpg = await tryGetFile(this.videoDir, `${frameId}.jpg`);
+		const png = jpg ? null : await tryGetFile(this.videoDir, `${frameId}.png`);
+		const fh = jpg ?? png;
+		if (!fh) return null;
+
+		const file = await fh.getFile();
+		const url = URL.createObjectURL(file);
+		return url;
 	}
 
 	// ---------- internal resolution ----------

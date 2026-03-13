@@ -156,8 +156,10 @@ If you have a video recorded alongside your LiDAR run and want to extract one im
 
 ```bash
 python extract_video_frames_to_run.py \
-  --run_dir /path/to/run_YYYYMMDD_HHMMSS \
-  --video   /path/to/recording.mp4
+  --run_dir '/Users/shonanhendre/Downloads/Runs_ Shonan March 13th/run_20260313_022648_3866' \
+  --video /Users/shonanhendre/Downloads/March9th_B5_2DRecording.mov \
+  --out_subdir frames/video \
+  --start_sec 0.0
 ```
 
 Frames are saved to `run_dir/frames/video/XXXXXX.jpg` by default. The script reads `frame_index.json` to determine how many frames to extract and samples them uniformly across the video duration.

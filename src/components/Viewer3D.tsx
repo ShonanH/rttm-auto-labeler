@@ -3,8 +3,9 @@
 import * as THREE from 'three';
 import { Canvas } from '@react-three/fiber';
 import type { FrameData, Box3D } from '@/lib/types';
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { OrbitControls, Stats, Bounds, useBounds, Text, Billboard } from '@react-three/drei';
+import { useReviewStore } from '@/store/useReviewStore';
 
 const CLASS_COLORS: Record<string, string> = {
 	Sedan: '#2563eb',
@@ -16,6 +17,15 @@ const CLASS_COLORS: Record<string, string> = {
 	Vehicle: '#111827',
 	Unknown: '#6b7280',
 };
+
+const DEFAULT_ROI = {
+	xMin: -46.716694,
+	xMax: 24.280104,
+	yMin: -35.653854,
+	yMax: 14.18241987,
+	zMin: -2.7757624,
+	zMax: 3.57883,
+} as const;
 
 function FitOnFrameChange({ frameId }: { frameId: string | null }) {
 	const api = useBounds();
@@ -76,7 +86,7 @@ function boxCorners(box: Box3D): THREE.Vector3[] {
 	});
 }
 
-function WireBox({ box, visible, color, label }: { box: Box3D; visible: boolean; color: string; label: string }) {
+function WireBox({ box, visible, color, label, selected }: { box: Box3D; visible: boolean; color: string; label: string; selected: boolean }) {
 	const geom = useMemo(() => {
 		const corners = boxCorners(box);
 		const idxPairs = [
@@ -114,16 +124,30 @@ function WireBox({ box, visible, color, label }: { box: Box3D; visible: boolean;
 
 	if (!visible) return null;
 
+	const drawColor = selected ? '#ff006e' : color;
+
 	// Label position: slightly above top face center
 	const labelPos: [number, number, number] = [box.x, box.y, box.z + box.h / 2 + 0.2];
 
 	return (
 		<group>
-			<lineSegments geometry={geom}>
-				<lineBasicMaterial color={color} linewidth={1} />
+			<lineSegments geometry={geom} renderOrder={selected ? 100 : 0}>
+				<lineBasicMaterial color={drawColor} />
 			</lineSegments>
+
+			{/* label */}
 			<Billboard follow position={[box.x, box.y, box.z + box.h / 2 + 0.4]}>
-				<Text frustumCulled={false} fontSize={0.8} color={color} anchorX='center' anchorY='middle' material-depthTest={false} material-depthWrite={false} renderOrder={999} outlineWidth={0.03} outlineColor='#ffffff'>
+				<Text
+					frustumCulled={false}
+					fontSize={0.8}
+					color={drawColor}
+					//  depthTest={false}
+					material-depthTest={false}
+					material-depthWrite={false}
+					renderOrder={999}
+					outlineWidth={0.03}
+					outlineColor='#000000'
+				>
 					{label}
 				</Text>
 			</Billboard>
@@ -131,9 +155,79 @@ function WireBox({ box, visible, color, label }: { box: Box3D; visible: boolean;
 	);
 }
 
-export function Viewer3D({ frame }: { frame: FrameData | null }) {
+function cropPointsROI(pointsNx4: Float32Array, roi: typeof DEFAULT_ROI): Float32Array {
+	const n = Math.floor(pointsNx4.length / 4);
+	// First pass: count
+	let keep = 0;
+	for (let i = 0; i < n; i++) {
+		const x = pointsNx4[i * 4 + 0];
+		const y = pointsNx4[i * 4 + 1];
+		const z = pointsNx4[i * 4 + 2];
+		if (x >= roi.xMin && x <= roi.xMax && y >= roi.yMin && y <= roi.yMax && z >= roi.zMin && z <= roi.zMax) keep++;
+	}
+	const out = new Float32Array(keep * 4);
+	let j = 0;
+	for (let i = 0; i < n; i++) {
+		const x = pointsNx4[i * 4 + 0];
+		const y = pointsNx4[i * 4 + 1];
+		const z = pointsNx4[i * 4 + 2];
+		const inten = pointsNx4[i * 4 + 3];
+		if (x >= roi.xMin && x <= roi.xMax && y >= roi.yMin && y <= roi.yMax && z >= roi.zMin && z <= roi.zMax) {
+			out[j++] = x;
+			out[j++] = y;
+			out[j++] = z;
+			out[j++] = inten;
+		}
+	}
+	return out;
+}
+
+function PickBox({ id, box, onPick }: { id: string; box: Box3D; onPick: (id: string, ev: MouseEvent) => void }) {
 	return (
-		<Canvas style={{ width: '100%', height: '100%', background: '#ffffff' }} onCreated={({ gl }) => gl.setClearColor('#ffffff', 1)} camera={{ position: [0, -40, 20], fov: 55 }}>
+		<mesh
+			position={[box.x, box.y, box.z]}
+			rotation={[0, 0, box.yaw]}
+			onPointerDown={(ev) => {
+				ev.stopPropagation();
+				onPick(id, ev.nativeEvent as MouseEvent);
+			}}
+		>
+			<boxGeometry args={[box.l, box.w, box.h]} />
+			{/* invisible but pickable */}
+			<meshBasicMaterial transparent opacity={0} depthWrite={false} />
+		</mesh>
+	);
+}
+
+export function Viewer3D({ frame }: { frame: FrameData | null }) {
+	const selectedIds = useReviewStore((s) => s.selectedIds);
+	const setSelectedOnly = useReviewStore((s) => s.setSelectedOnly);
+	const toggleSelected = useReviewStore((s) => s.toggleSelected);
+	const clearSelection = useReviewStore((s) => s.clearSelection);
+
+	function handlePick(id: string, ev: MouseEvent) {
+		const multi = ev.shiftKey || ev.ctrlKey || ev.metaKey;
+		if (multi) toggleSelected(id);
+		else setSelectedOnly(id);
+	}
+
+	const [roi] = useState(DEFAULT_ROI);
+
+	const croppedPoints = useMemo(() => {
+		if (!frame?.points) return null;
+		return cropPointsROI(frame?.points, roi);
+	}, [frame?.points, roi]);
+
+	const croppedInstances = useMemo(() => {
+		if (!frame?.instances) return [];
+		return frame?.instances.filter((it) => {
+			const { x, y, z } = it.box;
+			return x >= roi.xMin && x <= roi.xMax && y >= roi.yMin && y <= roi.yMax && z >= roi.zMin && z <= roi.zMax;
+		});
+	}, [frame?.instances, roi]);
+
+	return (
+		<Canvas style={{ width: '100%', height: '100%', background: '#ffffff' }} onCreated={({ gl }) => gl.setClearColor('#ffffff', 1)} onPointerMissed={() => clearSelection()} camera={{ position: [0, -40, 20], fov: 55 }}>
 			<ambientLight intensity={1.0} />
 			<directionalLight position={[10, -10, 20]} intensity={0.8} />
 
@@ -146,10 +240,20 @@ export function Viewer3D({ frame }: { frame: FrameData | null }) {
 			<Bounds fit clip margin={1.2}>
 				<FitOnFrameChange frameId={frame?.frameId ?? null} />
 
-				{frame?.points && <PointsCloud points={frame.points} />}
-				{frame?.instances?.map((it) => (
-					<WireBox key={it.id} box={it.box} visible={it.kept} color={CLASS_COLORS[it.className] ?? '#111827'} label={`${it.id}: ${it.className}`} />
-				))}
+				{croppedPoints && <PointsCloud points={croppedPoints} />}
+				{croppedInstances.map((it) => {
+					const color = CLASS_COLORS[it.className] ?? '#111827';
+					const label = `${it.id}: ${it.className}`;
+					const selected = selectedIds.has(it.id);
+
+					return (
+						<group key={it.id}>
+							<WireBox box={it.box} visible={it.kept} color={color} label={label} selected={selected} />
+							{/* pick mesh should exist even if kept=false? your choice */}
+							{it.kept && <PickBox id={it.id} box={it.box} onPick={handlePick} />}
+						</group>
+					);
+				})}
 			</Bounds>
 		</Canvas>
 	);

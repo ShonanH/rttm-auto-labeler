@@ -7,18 +7,25 @@ const CLASSES: ClassName[] = ['Sedan', 'SUV', 'Van', 'Truck', 'Bus', 'Cycle', 'V
 
 export function Inspector() {
 	const { currentFrame, toggleKept, relabel } = useReviewStore();
+	const selectedIds = useReviewStore((s) => s.selectedIds);
+	const bulkDeleteSelected = useReviewStore((s) => s.bulkDeleteSelected);
 
 	if (!currentFrame) {
 		return <div className='p-4 text-neutral-400'>No frame loaded.</div>;
 	}
 
-	const instances = currentFrame.instances;
+	const instances = currentFrame.instances.filter((it) => it.kept);
 
 	return (
 		<div className='h-full flex flex-col'>
 			<div className='p-3 border-b border-neutral-800'>
 				<div className='text-sm font-medium'>Boxes</div>
 				<div className='text-xs text-neutral-400'>{instances.length} instances</div>
+				<div className='mt-2 flex items-center gap-2'>
+					<button className='px-3 py-1.5 rounded-md bg-red-600 hover:bg-red-500 text-xs disabled:opacity-50' onClick={() => bulkDeleteSelected()} disabled={selectedIds.size === 0} title='Sets kept=false for selected boxes'>
+						Delete Selected ({selectedIds.size})
+					</button>
+				</div>
 			</div>
 
 			<div className='flex-1 overflow-auto p-3 space-y-2'>

@@ -13,6 +13,12 @@ type State = {
 
 	toggleKept: (instanceId: string) => void;
 	relabel: (instanceId: string, className: ClassName) => void;
+
+	selectedIds: Set<string>;
+	setSelectedOnly: (id: string) => void;
+	toggleSelected: (id: string) => void;
+	clearSelection: () => void;
+	bulkDeleteSelected: () => void;
 };
 
 export const useReviewStore = create<State>((set, get) => ({
@@ -36,5 +42,32 @@ export const useReviewStore = create<State>((set, get) => ({
 		if (!cf) return;
 		const instances = cf.instances.map((it) => (it.id === instanceId ? { ...it, className } : it));
 		set({ currentFrame: { ...cf, instances } });
+	},
+
+	selectedIds: new Set<string>(),
+
+	setSelectedOnly: (id) => {
+		set({ selectedIds: new Set([id]) });
+	},
+
+	toggleSelected: (id) => {
+		const next = new Set(get().selectedIds);
+		if (next.has(id)) next.delete(id);
+		else next.add(id);
+		set({ selectedIds: next });
+	},
+
+	clearSelection: () => set({ selectedIds: new Set() }),
+
+	bulkDeleteSelected: () => {
+		const { currentFrame, selectedIds } = get();
+		if (!currentFrame || selectedIds.size === 0) return;
+
+		const instances = currentFrame.instances.map((it) => (selectedIds.has(it.id) ? { ...it, kept: false } : it));
+
+		set({
+			currentFrame: { ...currentFrame, instances },
+			selectedIds: new Set(), // clear selection after delete
+		});
 	},
 }));

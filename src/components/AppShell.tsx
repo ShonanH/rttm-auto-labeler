@@ -8,6 +8,7 @@ import { useReviewStore } from '@/store/useReviewStore';
 import { FrameList } from './FrameList';
 import { Viewer3D } from './Viewer3D';
 import { Inspector } from './Inspector';
+import { VideoFrame } from '@/components/VideoFrame';
 
 export function AppShell() {
 	const adapter: RunAdapter = useMemo(() => new LocalRunsAdapter(), []);
@@ -16,6 +17,7 @@ export function AppShell() {
 	const [isLoading, setIsLoading] = useState(false);
 	const [runOpened, setRunOpened] = useState(false);
 	const [err, setErr] = useState<string | null>(null);
+	const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
 	async function openRun() {
 		try {
@@ -41,8 +43,19 @@ export function AppShell() {
 	async function loadFrame(frameId: string) {
 		setIsLoading(true);
 		setCurrentFrameId(frameId);
+
+		// revoke previous URL
+		setVideoUrl((prev) => {
+			if (prev) URL.revokeObjectURL(prev);
+			return prev;
+		});
+
 		const frame = await adapter.loadFrame(frameId);
 		setCurrentFrame(frame);
+
+		const url = await adapter.loadVideoFrameUrl(frameId);
+		setVideoUrl(url);
+
 		setIsLoading(false);
 	}
 
@@ -113,13 +126,18 @@ export function AppShell() {
 				</div>
 			</div>
 
-			<div className='h-[calc(100dvh-3.5rem)] overflow-hidden grid grid-cols-[320px_1fr_360px]'>
+			<div className='h-[calc(100dvh-3.5rem)] overflow-hidden grid grid-cols-[280px_1fr_360px]'>
 				<div className='border-r border-neutral-800 h-full overflow-hidden'>
 					<FrameList onSelect={(id) => void loadFrame(id)} />
 				</div>
-				<div className='relative h-full overflow-hidden'>
-					<Viewer3D frame={currentFrame} />
-					{!currentFrame && <div className='absolute inset-0 flex items-center justify-center text-neutral-400'>{runOpened ? 'Select a frame' : 'Open a run folder to begin'}</div>}
+				<div className='relative h-full overflow-hidden grid grid-rows-2'>
+					<div className='h-full overflow-hidden'>
+						<VideoFrame imageUrl={videoUrl} title={`2D ${currentFrameId ?? ''}`} />
+					</div>
+
+					<div className='relative h-full overflow-hidden border-r border-neutral-800'>
+						<Viewer3D frame={currentFrame} />
+					</div>
 				</div>
 				<div className='border-l border-neutral-800 h-full overflow-hidden'>
 					<Inspector />
