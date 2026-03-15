@@ -159,7 +159,9 @@ python extract_video_frames_to_run.py \
   --run_dir '/Users/shonanhendre/Downloads/Runs_ Shonan March 13th/run_20260313_022648_3866' \
   --video /Users/shonanhendre/Downloads/March9th_B5_2DRecording.mov \
   --out_subdir frames/video \
-  --start_sec 0.0
+  --start_sec 20.0 \
+  --lidar_fps 10
+
 ```
 
 Frames are saved to `run_dir/frames/video/XXXXXX.jpg` by default. The script reads `frame_index.json` to determine how many frames to extract and samples them uniformly across the video duration.
